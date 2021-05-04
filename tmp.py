@@ -167,7 +167,7 @@ def makeListText(dataSet):
 def makeListStars(dataSet):
     resList = []
     for entry in dataSet:
-        resList.append(entry['stars'])
+        resList.append(int(entry['stars']))
     return resList
 
 ### vader thresholds for scaling (constants)
@@ -187,7 +187,7 @@ q3 = 0.2
 q4 = 0.6
 q5 = 1
 
-largeDf = pd.DataFrame()
+
 
 def doAll(trainFileName, testFileName):
     trainSet = makeListEntries(trainFileName)
@@ -224,7 +224,6 @@ def doAll(trainFileName, testFileName):
     LR_CV_score = metrics.accuracy_score(listTestStars, LR_CV_prediction)
     LR_CV_f1 = metrics.f1_score(listTestStars, LR_CV_prediction, average='micro')
     LR_CV_r2 = metrics.r2_score(listTestStars, LR_CV_prediction)
-
     # this is the bit with the tfidf vectorizer
     # LR_TV_model = LogisticRegression(multi_class = 'multinomial', max_iter=1000)
     # LR_TV_model.fit(trainTVMatr, listTrainStars)
@@ -306,9 +305,8 @@ def doAll(trainFileName, testFileName):
     return [categoryName, LR_CV_score, LR_CV_f1, LR_CV_r2, NB_CV_score, NB_CV_f1, NB_CV_r2]
 
 # run 'em all
-print("got here")
-doAll("dataset/dataset_en_train.json", "dataset/dataset_en_test.json")
-
+#doAll("dataset/dataset_en_train.json", "dataset/dataset_en_test.json")
+doAll("dataset/smol_train.json", "dataset/smol_test.json")
 # equalizing - 75-25 split
 
 listSubFiles = [
@@ -344,7 +342,7 @@ listSubFiles = [
     ["dataset/prodAnalysis/train_watch.json", "dataset/prodAnalysis/test_watch.json"],
     ["dataset/prodAnalysis/train_wireless.json", "dataset/prodAnalysis/test_wireless.json"]
 ]
-
+# largeDf = pd.DataFrame()
 # for i in range(0,31):
     # list = doAll(listSubFiles[i][0], listSubFiles[i][1])
     # print("Mylist: " + str(list))

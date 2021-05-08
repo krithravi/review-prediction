@@ -1,18 +1,26 @@
 # imports
 import json
+import numpy as np
 import nltk
 import spacy
 import re
-from nltk import word_tokenize
-from nltk import sent_tokenize
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_extraction.text import TfidfVectorizer
+from nltk import word_tokenize, sent_tokenize
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 import pandas as pd
+from sklearn.base import clone
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+import mord
+from sklearn import linear_model, metrics, preprocessing
 
+# constants should we want that
+
+# taken from wikipedia + stackexchange answer: https://stackoverflow.com/questions/19790188/expanding-english-language-contractions-in-python
 contractions = {
     "ain't": "am not / are not / is not / has not / have not",
     "aren't": "are not / am not",
@@ -38,12 +46,12 @@ contractions = {
     "how'd'y": "how do you",
     "how'll": "how will",
     "how's": "how has / how is / how does",
-    "I'd": "I had / I would",
-    "I'd've": "I would have",
-    "I'll": "I shall / I will",
-    "I'll've": "I shall have / I will have",
-    "I'm": "I am",
-    "I've": "I have",
+    "i'd": "i had / i would",
+    "i'd've": "i would have",
+    "i'll": "i will",
+    "i'll've": "i will have",
+    "i'm": "i am",
+    "i've": "i have",
     "isn't": "is not",
     "it'd": "it had / it would",
     "it'd've": "it would have",
@@ -136,11 +144,13 @@ contractions = {
 # a bit of set up
 lemmatization_model = spacy.load('en_core_web_sm')
 
+# make list of entries
 def makeListEntries(filename):
     data = [json.loads(line) for line in open(filename, 'r')]
 
     for entry in data:
         entry['review_body'] = entry['review_body'].lower()
+        entry['review_body'] = entry['review_body'].replace("’", "'")
 
         # taking out contractions
         for key in contractions:
@@ -151,7 +161,6 @@ def makeListEntries(filename):
         # removing unnecessary punctuation
         tokens = lemmatization_model(entry['review_body'])
         entry['tokenized'] = [token.lemma_ for token in tokens if token.lemma_ not in {',', '.'}]
-
     return data
 
 # vectorize
@@ -187,6 +196,68 @@ q3 = 0.2
 q4 = 0.6
 q5 = 1
 
+# taken from https://towardsdatascience.com/simple-trick-to-train-an-ordinal-regression-with-any-classifier-6911183d2a3c
+class OrdinalClassifier():
+    
+    def __init__(self, clf):
+        self.clf = clf
+        self.clfs = {}
+    
+    def fit(self, X, y):
+        self.unique_class = np.sort(np.unique(y))
+        if self.unique_class.shape[0] > 2:
+            for i in range(self.unique_class.shape[0]-1):
+                # for each k - 1 ordinal value we fit a binary classification problem
+                binary_y = (y > self.unique_class[i]).astype(np.uint8)
+                clf = clone(self.clf)
+                clf.fit(X, binary_y)
+                self.clfs[i] = clf
+    
+    def predict_proba(self, X):
+        clfs_predict = {k:self.clfs[k].predict_proba(X) for k in self.clfs}
+        predicted = []
+        for i,y in enumerate(self.unique_class):
+            if i == 0:
+                # V1 = 1 - Pr(y > V1)
+                #predicted.append(1 - clfs_predict[y][:,1])
+                predicted.append(1 - clfs_predict[y-1][:,1])
+            elif y in clfs_predict:
+                # Vi = Pr(y > Vi-1) - Pr(y > Vi)
+                #predicted.append(clfs_predict[y-1][:,1] - clfs_predict[y][:,1])
+                predicted.append(clfs_predict[y-2][:,1] - clfs_predict[y-1][:,1])
+            else:
+                # Vk = Pr(y > Vk-1)
+                #predicted.append(clfs_predict[y-1][:,1])
+                predicted.append(clfs_predict[y-2][:,1])
+        return np.vstack(predicted).T
+    
+    def predict(self, X):
+        return np.argmax(self.predict_proba(X), axis=1)
+
+def betterScoring(true, pred):
+    ## SCORING GUIDELINES:
+    # 5 pts if right
+    # 4 pts if off by 1
+    # 3 pts if off by 2, etc
+    size = len(true)
+    score = 0
+    
+    thisdict = {
+        0: 0,
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0
+    }
+    
+    
+    for i in range(size):
+        offBy = abs(true[i] - pred[i])
+        thisdict[offBy] += 1
+        score += 5 - offBy
+    
+    #return score/(5 * size)
+    return thisdict
 
 
 def doAll(trainFileName, testFileName):
@@ -214,7 +285,7 @@ def doAll(trainFileName, testFileName):
     # testTVMatr = cv.transform(listTestText)
     """*************************************"""
     # using CountVectorizer
-    LR_CV_model = LogisticRegression(multi_class = 'multinomial', max_iter=1000)
+    LR_CV_model = LogisticRegression(multi_class = 'multinomial', max_iter=1000, class_weight='balanced')
     LR_CV_model.fit(trainCVMatr, listTrainStars)
 
     # get it to predict
@@ -223,7 +294,8 @@ def doAll(trainFileName, testFileName):
     # get accuracy score
     LR_CV_score = metrics.accuracy_score(listTestStars, LR_CV_prediction)
     LR_CV_f1 = metrics.f1_score(listTestStars, LR_CV_prediction, average='micro')
-    LR_CV_r2 = metrics.r2_score(listTestStars, LR_CV_prediction)
+    LR_CV_r2 = metrics.r2_score(listTestStars, LR_CV_prediction, multioutput='variance_weighted')
+    LR_my = betterScoring(listTestStars, LR_CV_prediction)
     # this is the bit with the tfidf vectorizer
     # LR_TV_model = LogisticRegression(multi_class = 'multinomial', max_iter=1000)
     # LR_TV_model.fit(trainTVMatr, listTrainStars)
@@ -235,7 +307,7 @@ def doAll(trainFileName, testFileName):
     # LR_TV_score = metrics.accuracy_score(listTestStars, LR_TV_prediction)
 
     # what do the data say?
-    print("Multiclass, logistic regression, CountVectorizer: " + str(LR_CV_score))
+    #print("Multiclass, logistic regression, CountVectorizer: " + str(LR_CV_score))
     #print("Multiclass, logistic regression, TfidfVectorizer: " + str(LR_TV_score))
     """*************************************"""
     # using CountVectorizer
@@ -248,8 +320,8 @@ def doAll(trainFileName, testFileName):
     # get accuracy score
     NB_CV_score = metrics.accuracy_score(listTestStars, NB_CV_prediction)
     NB_CV_f1 = metrics.f1_score(listTestStars, NB_CV_prediction, average='micro')
-    NB_CV_r2 = metrics.r2_score(listTestStars, NB_CV_prediction)
-
+    NB_CV_r2 = metrics.r2_score(listTestStars, NB_CV_prediction, multioutput='variance_weighted')
+    NB_my = betterScoring(listTestStars, NB_CV_prediction)
     # this is the bit with the tfidf vectorizer
     # NB_TV_model = MultinomialNB()
     # NB_TV_model.fit(trainCVMatr, listTrainStars)
@@ -261,7 +333,7 @@ def doAll(trainFileName, testFileName):
     # NB_TV_score = metrics.accuracy_score(listTestStars, NB_TV_prediction)
 
     # what do the data say?
-    print("Naive Bayes, CountVectorizer: " + str(NB_CV_score))
+    #print("Naive Bayes, CountVectorizer: " + str(NB_CV_score))
     # print("Naive Bayes, TfidfVectorizer: " + str(NB_TV_score))
     """*************************************"""
     sid = SentimentIntensityAnalyzer()
@@ -272,10 +344,9 @@ def doAll(trainFileName, testFileName):
     for entry in data2:
         listOfRes.append(sid.polarity_scores(entry['review_body'])['compound'])
 
-    numCorrect = 0
-
     scaledRes = []
-    for i in range(len(listOfRes)):
+    size = len(listOfRes)
+    for i in range(size):
         num = listOfRes[i]
         score = -1
         if num >= q0 and num < q1:
@@ -291,25 +362,84 @@ def doAll(trainFileName, testFileName):
 
         # add score back in
         scaledRes.append(score)
-        if score == int(data2[i]['stars']):
-            numCorrect += 1
 
-    size = len(listOfRes)
-    propCorrect = numCorrect/size
+    vader_acc = metrics.accuracy_score(listTestStars, scaledRes)
+    vader_f1 = metrics.f1_score(listTestStars, scaledRes, average='micro')
+    vader_r2 = metrics.r2_score(listTestStars, scaledRes, multioutput='variance_weighted')
+    vader_my = betterScoring(listTestStars, scaledRes)
+    """*************************************"""
+    # dealing with the ordinal regression
+    ord_model = OrdinalClassifier(DecisionTreeClassifier())
+    ord_model.fit(trainCVMatr, listTrainStars)
+    ord_model_prediction = ord_model.predict(testCVMatr)
+    
+    size = len(listTestStars)
+    for i in range(size):
+        if (ord_model_prediction[i] < 1):
+            ord_model_prediction[i] = 1
 
-    print("Baseline proportion correct: " + str(propCorrect))
+    ord_acc = metrics.accuracy_score(listTestStars, ord_model_prediction)
+    ord_f1 = metrics.f1_score(listTestStars, ord_model_prediction, average='micro')
+    ord_r2 = metrics.r2_score(listTestStars, ord_model_prediction, multioutput='variance_weighted')
+    ord_my = betterScoring(listTestStars, ord_model_prediction)
+    """*************************************"""
+    # trying mord
+    
+    arr = np.asarray(listTrainStars)
+    clf2 = mord.LogisticAT(alpha=1.)
+    clf2.fit(trainCVMatr, arr)
+    clf2_prediction = clf2.predict(testCVMatr)
+    
+    LAT_acc = metrics.accuracy_score(listTestStars, clf2_prediction)
+    LAT_f1 = metrics.f1_score(listTestStars, clf2_prediction, average='micro')
+    LAT_r2 = metrics.r2_score(listTestStars, clf2_prediction, multioutput='variance_weighted')
+    LAT_my = betterScoring(listTestStars, clf2_prediction)
+    #print('AccuracyScore of LogisticAT %s' %
+          #metrics.accuracy_score(listTestStars, clf2.predict(testCVMatr)))
+    
+    clf3 = mord.LogisticIT(alpha=1.)
+    clf3.fit(trainCVMatr, arr)
+    clf3_prediction = clf3.predict(testCVMatr)
+    
+    LIT_acc = metrics.accuracy_score(listTestStars, clf3_prediction)
+    LIT_f1 = metrics.f1_score(listTestStars, clf3_prediction, average='micro')
+    LIT_r2 = metrics.r2_score(listTestStars, clf3_prediction, multioutput='variance_weighted')
+    LIT_my = betterScoring(listTestStars, clf3_prediction)
+    #print('AccuracyScore of LogisticIT %s' %
+          #metrics.accuracy_score(listTestStars, clf3.predict(testCVMatr)))
 
-    # smol dataframe
+    clf4 = mord.LogisticSE(alpha=1.)
+    clf4.fit(trainCVMatr, arr)
+    clf4_prediction = clf4.predict(testCVMatr)
+    
+    LSE_acc = metrics.accuracy_score(listTestStars, clf4_prediction)
+    LSE_f1 = metrics.f1_score(listTestStars, clf4_prediction, average='micro')
+    LSE_r2 = metrics.r2_score(listTestStars, clf4_prediction, multioutput='variance_weighted')
+    LSE_my = betterScoring(listTestStars, clf4_prediction)
+    #print('AccuracyScore of LogisticSE %s' %
+        #metrics.accuracy_score(listTestStars, clf4.predict(testCVMatr)))
+    """*************************************"""
+    
+
+    # return value
     categoryName = trainFileName.replace("dataset/prodAnalysis/train_", "")
     categoryName = categoryName.replace(".json", "")
-    return [categoryName, LR_CV_score, LR_CV_f1, LR_CV_r2, NB_CV_score, NB_CV_f1, NB_CV_r2]
+    return [categoryName, 
+            LR_CV_score, LR_CV_f1, LR_CV_r2, LR_my, 
+            NB_CV_score, NB_CV_f1, NB_CV_r2, NB_my, 
+            vader_acc, vader_f1, vader_r2, vader_my, 
+            ord_acc, ord_f1, ord_r2, ord_my,
+            LAT_acc, LAT_f1, LAT_r2, LAT_my, 
+            LIT_acc, LIT_f1, LIT_r2, LIT_my, 
+            LSE_acc, LSE_f1, LSE_r2, LSE_my, 
+    ]
 
 # run 'em all
-#doAll("dataset/dataset_en_train.json", "dataset/dataset_en_test.json")
 doAll("dataset/smol_train.json", "dataset/smol_test.json")
-# equalizing - 75-25 split
+#doAll("dataset/dataset_en_train.json", "dataset/dataset_en_test.json")#
 
 listSubFiles = [
+    ["dataset/prodAnalysis/train_entire.json", "dataset/prodAnalysis/test_entire.json"],
     ["dataset/prodAnalysis/train_apparel.json", "dataset/prodAnalysis/test_apparel.json"],
     ["dataset/prodAnalysis/train_automotive.json", "dataset/prodAnalysis/test_automotive.json"],
     ["dataset/prodAnalysis/train_baby_product.json", "dataset/prodAnalysis/test_baby_product.json"],
@@ -342,47 +472,17 @@ listSubFiles = [
     ["dataset/prodAnalysis/train_watch.json", "dataset/prodAnalysis/test_watch.json"],
     ["dataset/prodAnalysis/train_wireless.json", "dataset/prodAnalysis/test_wireless.json"]
 ]
-# largeDf = pd.DataFrame()
-# for i in range(0,31):
-    # list = doAll(listSubFiles[i][0], listSubFiles[i][1])
-    # print("Mylist: " + str(list))
-    # largeDf[list[0]] = list[1:]
 
-# print("spacerrrrrrr")
-# print(largeDf.head())
-# largeDf.to_csv(path_or_buf="res.csv")
+"""
+largeDf = pd.DataFrame()
+for i in range(0,31):
+    list = doAll(listSubFiles[i][0], listSubFiles[i][1])
+    largeDf[list[0]] = list[1:]
 
-# doAll(listSubFiles[0][0], listSubFiles[0][1])
-# doAll(listSubFiles[1][0], listSubFiles[1][1])
-# doAll(listSubFiles[2][0], listSubFiles[2][1])
-# doAll(listSubFiles[3][0], listSubFiles[3][1])
-# doAll(listSubFiles[4][0], listSubFiles[4][1])
-# doAll(listSubFiles[5][0], listSubFiles[5][1])
-# doAll(listSubFiles[6][0], listSubFiles[6][1])
-# doAll(listSubFiles[7][0], listSubFiles[7][1])
+largeDf.head()
+largeDf.to_csv(path_or_buf="res.csv")
 
-# doAll(listSubFiles[8][0], listSubFiles[8][1])
-# doAll(listSubFiles[9][0], listSubFiles[9][1])
-# doAll(listSubFiles[10][0], listSubFiles[10][1])
-# doAll(listSubFiles[11][0], listSubFiles[11][1])
-# doAll(listSubFiles[12][0], listSubFiles[12][1])
-# doAll(listSubFiles[13][0], listSubFiles[13][1])
-# doAll(listSubFiles[14][0], listSubFiles[14][1])
-# doAll(listSubFiles[15][0], listSubFiles[15][1])
-# doAll(listSubFiles[16][0], listSubFiles[16][1])
+"""
 
-# doAll(listSubFiles[17][0], listSubFiles[17][1])
-# doAll(listSubFiles[18][0], listSubFiles[18][1])
-# doAll(listSubFiles[19][0], listSubFiles[19][1])
-# doAll(listSubFiles[20][0], listSubFiles[20][1])
-# doAll(listSubFiles[21][0], listSubFiles[21][1])
-# doAll(listSubFiles[22][0], listSubFiles[22][1])
-# doAll(listSubFiles[23][0], listSubFiles[23][1])
-# doAll(listSubFiles[24][0], listSubFiles[24][1])
-# doAll(listSubFiles[25][0], listSubFiles[25][1])
-# doAll(listSubFiles[26][0], listSubFiles[26][1])
 
-# doAll(listSubFiles[27][0], listSubFiles[27][1])
-# doAll(listSubFiles[28][0], listSubFiles[28][1])
-# doAll(listSubFiles[29][0], listSubFiles[29][1])
-# doAll(listSubFiles[30][0], listSubFiles[30][1])
+print("done")

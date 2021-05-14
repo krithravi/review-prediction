@@ -1,1 +1,3 @@
-LIN373N final project repo
+LIN373N Final Project: Review Score Prediction
+
+

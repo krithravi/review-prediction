@@ -1,31 +1,97 @@
-16742
-7871
-3302
-12736
-3943
-2245
-7071
-1447
-12335
-6521
-3105
-4950
-7513
-26022
-2118
-2892
-10902
-7695
-1397
-1151
-5777
-14104
-6709
-78
-7432
-5450
-8719
-9203
-836
-788
-16459
+    16742 apparel.json
+     7871 automotive.json
+     3302 baby_product.json
+    12736 beauty.json
+     3943 book.json
+     2245 camera.json
+     7071 digital_ebook_purchase.json
+     1447 digital_video_download.json
+    12335 drugstore.json
+     6521 electronics.json
+     3105 furniture.json
+     4950 grocery.json
+     7513 home_improvement.json
+    26022 home.json
+     2118 industrial_supplies.json
+     2892 jewelry.json
+    10902 kitchen.json
+     7695 lawn_and_garden.json
+     1397 luggage.json
+     1151 musical_instruments.json
+     5777 office_product.json
+    14104 other.json
+     6709 pc.json
+       78 personal_care_appliances.json
+     7432 pet_products.json
+     5450 shoes.json
+     8719 sports.json
+     4186 test_apparel.json
+     1968 test_automotive.json
+      826 test_baby_product.json
+     3184 test_beauty.json
+      986 test_book.json
+      561 test_camera.json
+     1768 test_digital_ebook_purchase.json
+      362 test_digital_video_download.json
+     3084 test_drugstore.json
+     1630 test_electronics.json
+     5000 test_entire.json
+      776 test_furniture.json
+     1238 test_grocery.json
+     1878 test_home_improvement.json
+     6506 test_home.json
+      530 test_industrial_supplies.json
+      723 test_jewelry.json
+     2726 test_kitchen.json
+     1924 test_lawn_and_garden.json
+      349 test_luggage.json
+      288 test_musical_instruments.json
+     1444 test_office_product.json
+     3526 test_other.json
+     1677 test_pc.json
+       20 test_personal_care_appliances.json
+     1858 test_pet_products.json
+     1362 test_shoes.json
+     2180 test_sports.json
+     2301 test_toy.json
+      209 test_video_games.json
+      197 test_watch.json
+     4115 test_wireless.json
+       20 tmp.sh
+     9203 toy.json
+    12556 train_apparel.json
+     5903 train_automotive.json
+     2476 train_baby_product.json
+     9552 train_beauty.json
+     2957 train_book.json
+     1684 train_camera.json
+     5303 train_digital_ebook_purchase.json
+     1085 train_digital_video_download.json
+     9251 train_drugstore.json
+     4891 train_electronics.json
+   200000 train_entire.json
+     2329 train_furniture.json
+     3712 train_grocery.json
+     5635 train_home_improvement.json
+    19516 train_home.json
+     1588 train_industrial_supplies.json
+     2169 train_jewelry.json
+     8176 train_kitchen.json
+     5771 train_lawn_and_garden.json
+     1048 train_luggage.json
+      863 train_musical_instruments.json
+     4333 train_office_product.json
+    10578 train_other.json
+     5032 train_pc.json
+       58 train_personal_care_appliances.json
+     5574 train_pet_products.json
+     4088 train_shoes.json
+     6539 train_sports.json
+     6902 train_toy.json
+      627 train_video_games.json
+      591 train_watch.json
+    12344 train_wireless.json
+      836 video_games.json
+      788 watch.json
+    16459 wireless.json
+   640046 total
